@@ -779,7 +779,7 @@ document.getElementById('resetData').onclick=()=>toast('Reset geral desativado n
 </script>
 <script>
 async function bootAuth(){const {data:{session}}=await sb.auth.getSession();if(session){currentUser=session.user;document.getElementById('authGate').style.display='none';document.getElementById('sessionEmail').textContent=currentUser.email||'';try{await loadCloudState()}catch(e){toast('Erro ao carregar banco: '+e.message)}}else document.getElementById('authGate').style.display='flex';}
-document.getElementById('authLogin').onclick=async()=>{const email=document.getElementById('authEmail').value.trim(),password=document.getElementById('authPassword').value;const {error}=await sb.auth.signInWithPassword({email,password});if(error)return toast('Login: '+error.message);await bootAuth();};
+document.getElementById('authLogin').addEventListener('click',async()=>{const email=document.getElementById('authEmail').value.trim(),password=document.getElementById('authPassword').value;const {error}=await sb.auth.signInWithPassword({email,password});if(error)return toast('Login: '+error.message);await bootAuth();};
 document.getElementById('authSignup').onclick=async()=>{const email=document.getElementById('authEmail').value.trim(),password=document.getElementById('authPassword').value;if(!email||password.length<6)return toast('Informe e-mail e senha com pelo menos 6 caracteres.');const {data,error}=await sb.auth.signUp({email,password});if(error)return toast('Cadastro: '+error.message);if(data.session){await bootAuth();toast('Conta criada.')}else toast('Cadastro criado. Confirme pelo e-mail para entrar.');};
 document.getElementById('btnLogout').onclick=async()=>{await sb.auth.signOut();location.reload();};
 bootAuth();
