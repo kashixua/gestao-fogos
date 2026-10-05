@@ -467,6 +467,19 @@ const DB_KEY='gestao_fogos_cloud_v4';
 const SUPABASE_URL="https://yggetslsrdwczlasphjh.supabase.co";
 const SUPABASE_KEY="sb_publishable_PojyyfQRn23UPrHB09CCmw_4PoRNdUL";
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+document.getElementById('authSignup').addEventListener('click',async function(){
+ const email=document.getElementById('authEmail').value.trim();
+ const password=document.getElementById('authPassword').value;
+ if(!email||password.length<6){alert('Informe e-mail e senha com pelo menos 6 caracteres.');return;}
+ this.disabled=true;
+ try{
+   const r=await sb.auth.signUp({email,password});
+   if(r.error) alert('Cadastro: '+r.error.message);
+   else if(r.data.session) location.reload();
+   else alert('Cadastro criado. Confira seu e-mail para confirmar.');
+ }catch(e){alert('Falha de conexão: '+e.message)}
+ finally{this.disabled=false}
+});
 const emptyState=()=>({products:[],clients:[],suppliers:[],sales:[],purchases:[],clientPayments:[],supplierPayments:[],legacyClientSales:[],legacySupplierDebts:[],cash:[],expenses:[]});
 let state=emptyState(), saleCart=[], currentUser=null;
 function loadState(){return emptyState();}
