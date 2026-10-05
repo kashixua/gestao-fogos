@@ -467,7 +467,7 @@ const DB_KEY='gestao_fogos_cloud_v4';
 const SUPABASE_URL="https://yggetslsrdwczlasphjh.supabase.co";
 const SUPABASE_KEY="sb_publishable_PojyyfQRn23UPrHB09CCmw_4PoRNdUL";
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
-const emptyState=()=>({products:[],clients:[],suppliers:[],sales:[],purchases:[],clientPayments:[],supplierPayments:[],legacyClientSales:[],legacySupplierDebts:[],cash:[],expenses:[]});
+const emptyState=()=>({products:[],clients:[],suppliers:[],sales:[],purchases:[],clientPayments:[],supplierPayments:[],legacyClientSales:[],legacySupplierDebts:[],cash:[],expenses:[],saleItems:[],purchaseItems:[]});
 let state=emptyState(), saleCart=[], currentUser=null;
 function loadState(){return emptyState();}
 function saveState(){renderAll();updateSaleType();}
@@ -475,7 +475,7 @@ async function cloudInsert(t,row){const r=await sb.from(t).insert({...row,user_i
 async function cloudUpdate(t,id,patch){const r=await sb.from(t).update(patch).eq('id',id);if(r.error)throw r.error;}
 async function cloudDelete(t,id){const r=await sb.from(t).delete().eq('id',id);if(r.error)throw r.error;}
 async function loadCloudState(){
- const map=[['products','products'],['clients','clients'],['suppliers','suppliers'],['sales','sales'],['purchases','purchases'],['client_payments','clientPayments'],['supplier_payments','supplierPayments'],['cash_movements','cash'],['expenses','expenses']];
+ const map=[['products','products'],['clients','clients'],['suppliers','suppliers'],['sales','sales'],['purchases','purchases'],['client_payments','clientPayments'],['supplier_payments','supplierPayments'],['cash_movements','cash'],['expenses','expenses'],['sale_items','saleItems'],['purchase_items','purchaseItems']];
  const n=emptyState();
  for(const [t,k] of map){const r=await sb.from(t).select('*').order('created_at',{ascending:false});if(r.error)throw r.error;n[k]=r.data||[];}
  n.products=n.products.map(p=>({...p,qty:+p.quantity,min:+p.min_stock,cost:+p.unit_cost,price:+p.sale_price}));
@@ -487,6 +487,8 @@ async function loadCloudState(){
  n.expenses=n.expenses.map(x=>({...x,date:x.expense_date,method:x.payment_method}));
  n.clients=n.clients.map(c=>{let d=n.sales.filter(x=>x.client_id===c.id&&x.status!=='cancelled').reduce((s,x)=>s+(+x.total-+x.received_amount),0)-n.clientPayments.filter(x=>x.client_id===c.id).reduce((s,x)=>s+(+x.amount),0);return{...c,debt:Math.max(0,d)}});
  n.suppliers=n.suppliers.map(s=>{let d=n.purchases.filter(x=>x.supplier_id===s.id&&x.status!=='cancelled').reduce((z,x)=>z+(+x.total-+x.paid_amount),0)-n.supplierPayments.filter(x=>x.supplier_id===s.id).reduce((z,x)=>z+(+x.amount),0);return{...s,debt:Math.max(0,d)}});
+ n.sales=n.sales.map(s=>({...s,items:n.saleItems.filter(i=>i.sale_id===s.id).map(i=>({productId:i.product_id,name:i.product_name,qty:+i.quantity,unitPrice:+i.unit_price,unitCost:+i.unit_cost}))}));
+ n.purchases=n.purchases.map(p=>({...p,items:n.purchaseItems.filter(i=>i.purchase_id===p.id)}));
  n.legacyClientSales=n.sales.filter(x=>x.sale_type==='legacy');n.legacySupplierDebts=n.purchases.filter(x=>x.purchase_type==='legacy');
  state=n;renderAll();updateSaleType();
 }
@@ -644,11 +646,11 @@ function renderSuppliers(){
 }
 
 function renderSales(){
-  document.getElementById('salesList').innerHTML = state.sales.length ? state.sales.slice().reverse().map(s=>{
+  document.getElementById('salesList').innerHTML = state.sales.length ? state.sales.map(s=>{
     const client=state.clients.find(c=>c.id===s.clientId);
     const saleName=s.walkIn?'Cliente balcão':(client?.name||'Venda sem cliente');
     return `<div class="list-item"><div><strong>${brl(s.total)} • ${esc(saleName)}</strong>
-      <small>${new Date(s.date).toLocaleString('pt-BR')} • Recebido ${brl(s.received)} • ${esc(s.method)}</small></div>
+      <small>${new Date(s.date).toLocaleString('pt-BR')} • Recebido ${brl(s.received)} • ${esc(s.method||'Não informado')}</small></div>
       <span class="status ${s.debt>0?'warn':'ok'}">${s.debt>0?'Falta '+brl(s.debt):'Pago'}</span></div>`;
   }).join('') : '<div class="empty">Nenhuma venda registrada.</div>';
 }
@@ -677,7 +679,7 @@ function renderFinance(){
 
 function renderReports(){
   const grossMargin = state.sales.reduce((sum,s)=>{
-    return sum+s.items.reduce((a,it)=>{
+    return sum+(s.items||[]).reduce((a,it)=>{
       const p=state.products.find(p=>p.id===it.productId);
       return a + (Number(it.unitPrice)-Number(p?.cost||0))*Number(it.qty);
     },0);
@@ -690,7 +692,7 @@ function renderReports(){
   ].map(([a,b])=>`<div class="metric"><small>${a}</small><strong>${b}</strong></div>`).join('');
 
   const qtyByProduct={};
-  state.sales.forEach(s=>s.items.forEach(it=>qtyByProduct[it.productId]=(qtyByProduct[it.productId]||0)+Number(it.qty)));
+  state.sales.forEach(s=>(s.items||[]).forEach(it=>qtyByProduct[it.productId]=(qtyByProduct[it.productId]||0)+Number(it.qty)));
   const tops=Object.entries(qtyByProduct).sort((a,b)=>b[1]-a[1]).slice(0,10);
   document.getElementById('topProducts').innerHTML=tops.length?tops.map(([pid,q],i)=>{
     const p=state.products.find(x=>x.id===pid);
@@ -698,8 +700,8 @@ function renderReports(){
   }).join(''):'<div class="empty">Sem vendas para analisar.</div>';
 
   const methods={};
-  state.sales.forEach(s=>methods[s.method]=(methods[s.method]||0)+Number(s.received||0));
-  state.clientPayments.forEach(p=>methods[p.method]=(methods[p.method]||0)+Number(p.amount||0));
+  state.sales.forEach(s=>methods[s.method||'Não informado']=(methods[s.method||'Não informado']||0)+Number(s.received||0));
+  state.clientPayments.forEach(p=>methods[p.method||'Não informado']=(methods[p.method||'Não informado']||0)+Number(p.amount||0));
   document.getElementById('paymentMethods').innerHTML=Object.keys(methods).length?Object.entries(methods).sort((a,b)=>b[1]-a[1]).map(([m,v])=>
     `<div class="list-item"><div><strong>${esc(m)}</strong><small>Total efetivamente recebido</small></div><strong>${brl(v)}</strong></div>`
   ).join(''):'<div class="empty">Sem recebimentos para analisar.</div>';
@@ -758,7 +760,7 @@ document.getElementById('saleType').addEventListener('change',updateSaleType);
 document.getElementById('todayText').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
 
 
-document.getElementById('saveProduct').onclick=async()=>{try{const name=document.getElementById('prodName').value.trim();if(!name)return toast('Informe o produto.');await cloudInsert('products',{name,category:document.getElementById('prodCategory').value.trim()||null,quantity:parseNum('prodQty'),min_stock:parseNum('prodMin'),unit_cost:parseNum('prodCost'),sale_price:parseNum('prodPrice'),lot:document.getElementById('prodLot').value.trim()||null,expiry_date:document.getElementById('prodExpiry').value||null,notes:document.getElementById('prodNotes').value.trim()||null});await refreshCloud('Produto salvo na nuvem.')}catch(e){toast('Erro: '+e.message)}};
+document.getElementById('saveProduct').onclick=async()=>{try{const name=document.getElementById('prodName').value.trim(),quantity=parseNum('prodQty'),min_stock=parseNum('prodMin'),unit_cost=parseNum('prodCost'),sale_price=parseNum('prodPrice');if(!name)return toast('Informe o produto.');if(quantity<0||min_stock<0||unit_cost<0||sale_price<0)return toast('Quantidade, estoque mínimo, custo e preço não podem ser negativos.');await cloudInsert('products',{name,category:document.getElementById('prodCategory').value.trim()||null,quantity,min_stock,unit_cost,sale_price,lot:document.getElementById('prodLot').value.trim()||null,expiry_date:document.getElementById('prodExpiry').value||null,notes:document.getElementById('prodNotes').value.trim()||null});await refreshCloud('Produto salvo na nuvem.')}catch(e){toast('Erro: '+e.message)}};
 document.getElementById('saveClient').onclick=async()=>{try{const name=document.getElementById('clientName').value.trim();if(!name)return toast('Informe o cliente.');await cloudInsert('clients',{name,phone:document.getElementById('clientPhone').value.trim()||null});await refreshCloud('Cliente cadastrado.')}catch(e){toast('Erro: '+e.message)}};
 document.getElementById('saveSupplier').onclick=async()=>{try{const name=document.getElementById('supName').value.trim();if(!name)return toast('Informe o fornecedor.');await cloudInsert('suppliers',{name,phone:document.getElementById('supPhone').value.trim()||null});await refreshCloud('Fornecedor cadastrado.')}catch(e){toast('Erro: '+e.message)}};
 document.getElementById('addSaleItem').onclick=()=>{const pid=document.getElementById('saleProduct').value,p=state.products.find(x=>x.id===pid),qty=parseNum('saleQty');if(!p||qty<=0)return toast('Selecione produto e quantidade.');const ex=saleCart.find(x=>x.productId===pid),q=(ex?.qty||0)+qty;if(q>+p.qty)return toast('Estoque insuficiente.');if(ex)ex.qty=q;else saleCart.push({productId:pid,name:p.name,qty,unitPrice:+p.price,unitCost:+p.cost});renderCart();};
