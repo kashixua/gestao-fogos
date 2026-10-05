@@ -457,7 +457,9 @@ th{color:var(--muted);font-weight:600}
     </main>
   </div>
 
-<div id="authGate" style="position:fixed;inset:0;background:#071018;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px"><div class="panel" style="width:min(430px,100%);padding:24px"><h2>🔥 Gestão Fogos</h2><p>Entre para acessar os dados salvos na nuvem.</p><div class="form-grid" style="grid-template-columns:1fr"><label>E-mail<input id="authEmail" type="email" autocomplete="email"></label><label>Senha<div style="display:flex;gap:8px"><input id="authPassword" type="password" autocomplete="current-password" style="flex:1"><button id="togglePassword" type="button" class="secondary" style="white-space:nowrap;padding:0 12px">👁 Ver senha</button></div></label></div><button id="authLogin" class="primary full" style="margin-top:12px">Entrar</button><button id="authSignup" class="secondary full" style="margin-top:8px">Criar primeiro acesso</button><p style="font-size:12px;opacity:.7">Banco separado do seu app financeiro.</p></div></div>
+<div id="authGate" style="position:fixed;inset:0;background:#071018;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px"><div class="panel" style="width:min(430px,100%);padding:24px"><h2>🔥 Gestão Fogos</h2><p>Entre para acessar os dados salvos na nuvem.</p><div class="form-grid" style="grid-template-columns:1fr"><label>E-mail<input id="authEmail" type="email" autocomplete="email"></label><label>Senha<div style="display:flex;gap:8px"><input id="authPassword" type="password" autocomplete="current-password" style="flex:1"><button id="togglePassword" type="button" class="secondary" style="white-space:nowrap;padding:0 12px">👁 Ver senha</button></div></label></div><button id="authLogin" class="primary full" style="margin-top:12px">Entrar</button><button id="authSignup" class="secondary full" style="margin-top:8px">Criar primeiro acesso</button>
+<button id="forgotPassword" type="button" class="secondary full" style="margin-top:8px">Esqueci minha senha</button>
+<div id="authStatus" style="min-height:20px;margin-top:12px;font-size:13px"></div><p style="font-size:12px;opacity:.7">Banco separado do seu app financeiro.</p></div></div>
   <div id="toast" class="toast"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -467,19 +469,6 @@ const DB_KEY='gestao_fogos_cloud_v4';
 const SUPABASE_URL="https://yggetslsrdwczlasphjh.supabase.co";
 const SUPABASE_KEY="sb_publishable_PojyyfQRn23UPrHB09CCmw_4PoRNdUL";
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
-document.getElementById('forgotPassword').onclick=async()=>{const email=document.getElementById('authEmail').value.trim();if(!email)return alert('Informe seu e-mail.');const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:'https://kashixua.github.io/gestao-fogos/'});if(error)return alert('Não foi possível enviar: '+error.message);alert('Enviei o link de redefinição para o seu e-mail.');};
-
-document.getElementById('authLogin').onclick=async function(){
- const email=document.getElementById('authEmail').value.trim();
- const password=document.getElementById('authPassword').value;
- if(!email||!password){alert('Informe e-mail e senha.');return;}
- try{
-  const r=await sb.auth.signInWithPassword({email,password});
-  if(r.error){alert('Login: '+r.error.message);return;}
-  location.reload();
- }catch(e){alert('Falha no login: '+e.message);}
-};
-
 const emptyState=()=>({products:[],clients:[],suppliers:[],sales:[],purchases:[],clientPayments:[],supplierPayments:[],legacyClientSales:[],legacySupplierDebts:[],cash:[],expenses:[],saleItems:[],purchaseItems:[]});
 let state=emptyState(), saleCart=[], currentUser=null;
 function loadState(){return emptyState();}
@@ -792,16 +781,53 @@ document.getElementById('exportData').onclick=()=>toast('Os dados agora ficam sa
 document.getElementById('resetData').onclick=()=>toast('Reset geral desativado na versão em nuvem por segurança.');
 
 
-</script>
-<script>
-async function bootAuth(){const {data:{session}}=await sb.auth.getSession();if(session){currentUser=session.user;document.getElementById('authGate').style.display='none';document.getElementById('sessionEmail').textContent=currentUser.email||'';try{await loadCloudState()}catch(e){toast('Erro ao carregar banco: '+e.message)}}else document.getElementById('authGate').style.display='flex';}
-document.getElementById('authLogin').addEventListener('click',async()=>{const email=document.getElementById('authEmail').value.trim(),password=document.getElementById('authPassword').value;const {error}=await sb.auth.signInWithPassword({email,password});if(error)return toast('Login: '+error.message);await document.getElementById('changePassword').onclick=async()=>{const a=document.getElementById('newPassword').value,b=document.getElementById('confirmNewPassword').value;if(a.length<6)return alert('A nova senha precisa ter pelo menos 6 caracteres.');if(a!==b)return alert('As senhas não coincidem.');const {error}=await sb.auth.updateUser({password:a});if(error)return alert('Erro ao alterar senha: '+error.message);document.getElementById('newPassword').value='';document.getElementById('confirmNewPassword').value='';alert('Senha alterada com sucesso.');};
-bootAuth();};
-document.getElementById('authSignup').onclick=async()=>{const email=document.getElementById('authEmail').value.trim(),password=document.getElementById('authPassword').value;if(!email||password.length<6)return toast('Informe e-mail e senha com pelo menos 6 caracteres.');const {data,error}=await sb.auth.signUp({email,password});if(error)return toast('Cadastro: '+error.message);if(data.session){await bootAuth();toast('Conta criada.')}else toast('Cadastro criado. Confirme pelo e-mail para entrar.');};
-document.getElementById('togglePassword').onclick=()=>{const p=document.getElementById('authPassword');const show=p.type==='password';p.type=show?'text':'password';document.getElementById('togglePassword').textContent=show?'🙈 Ocultar':'👁 Ver senha';};
-document.getElementById('btnLogout').onclick=async()=>{await sb.auth.signOut();location.reload();};
-bootAuth();
 
+/* AUTH V2 - controlador único */
+const AUTH_REDIRECT='https://kashixua.github.io/gestao-fogos/';
+const authGate=document.getElementById('authGate');
+const authStatus=document.getElementById('authStatus');
+function setAuthStatus(message,isError=false){authStatus.textContent=message||'';authStatus.style.color=isError?'#ff8b8b':'#c9b56b';}
+function setAuthBusy(busy){['authLogin','authSignup','forgotPassword'].forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=busy;});}
+async function openAuthenticatedApp(session){
+ currentUser=session.user;
+ authGate.style.display='none';
+ document.getElementById('sessionEmail').textContent=currentUser.email||'';
+ try{await loadCloudState();}catch(e){authGate.style.display='flex';setAuthStatus('Entrou, mas não foi possível carregar os dados: '+e.message,true);}
+}
+async function initializeAuth(){
+ try{
+  const {data,error}=await sb.auth.getSession();if(error)throw error;
+  if(data.session)await openAuthenticatedApp(data.session);else authGate.style.display='flex';
+ }catch(e){authGate.style.display='flex';setAuthStatus('Falha ao iniciar autenticação: '+e.message,true);}
+}
+document.getElementById('authLogin').onclick=async()=>{
+ const email=document.getElementById('authEmail').value.trim(),password=document.getElementById('authPassword').value;
+ if(!email||!password)return setAuthStatus('Informe e-mail e senha.',true);
+ setAuthBusy(true);setAuthStatus('Entrando...');
+ try{const {data,error}=await sb.auth.signInWithPassword({email,password});if(error)throw error;if(!data.session)throw new Error('Sessão não criada.');setAuthStatus('');await openAuthenticatedApp(data.session);}
+ catch(e){setAuthStatus(e.message==='Invalid login credentials'?'E-mail ou senha incorretos. Use “Esqueci minha senha” se necessário.':'Não foi possível entrar: '+e.message,true);}
+ finally{setAuthBusy(false);}
+};
+document.getElementById('authSignup').onclick=async()=>{
+ const email=document.getElementById('authEmail').value.trim(),password=document.getElementById('authPassword').value;
+ if(!email||password.length<6)return setAuthStatus('Informe um e-mail e senha com pelo menos 6 caracteres.',true);
+ setAuthBusy(true);setAuthStatus('Criando acesso...');
+ try{const {data,error}=await sb.auth.signUp({email,password,options:{emailRedirectTo:AUTH_REDIRECT}});if(error)throw error;if(data.session)await openAuthenticatedApp(data.session);else setAuthStatus('Cadastro criado. Confirme o e-mail e depois entre.');}
+ catch(e){setAuthStatus('Não foi possível criar o acesso: '+e.message,true);}finally{setAuthBusy(false);}
+};
+document.getElementById('forgotPassword').onclick=async()=>{
+ const email=document.getElementById('authEmail').value.trim();if(!email)return setAuthStatus('Digite seu e-mail primeiro.',true);
+ setAuthBusy(true);setAuthStatus('Enviando recuperação...');
+ try{const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:AUTH_REDIRECT});if(error)throw error;setAuthStatus('E-mail de recuperação enviado. Abra o link recebido para definir uma nova senha.');}
+ catch(e){setAuthStatus('Não foi possível enviar a recuperação: '+e.message,true);}finally{setAuthBusy(false);}
+};
+document.getElementById('togglePassword').onclick=()=>{const p=document.getElementById('authPassword'),show=p.type==='password';p.type=show?'text':'password';document.getElementById('togglePassword').textContent=show?'🙈 Ocultar':'👁 Ver senha';};
+document.getElementById('btnLogout').onclick=async()=>{await sb.auth.signOut();location.reload();};
+const changePassword=document.getElementById('changePassword');
+if(changePassword)changePassword.onclick=async()=>{const a=document.getElementById('newPassword').value,b=document.getElementById('confirmNewPassword').value;if(a.length<6)return toast('Use pelo menos 6 caracteres.');if(a!==b)return toast('As senhas não coincidem.');const {error}=await sb.auth.updateUser({password:a});if(error)return toast('Erro: '+error.message);document.getElementById('newPassword').value='';document.getElementById('confirmNewPassword').value='';toast('Senha alterada com sucesso.');};
+sb.auth.onAuthStateChange(async(event,session)=>{if(event==='PASSWORD_RECOVERY'){authGate.style.display='none';setTimeout(()=>{navigate('config');document.getElementById('newPassword')?.focus();toast('Defina sua nova senha em Segurança.');},0);}else if(event==='SIGNED_OUT'){authGate.style.display='flex';}});
+initializeAuth();
 </script>
+
 </body>
 </html>
