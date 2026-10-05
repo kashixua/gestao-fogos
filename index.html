@@ -457,7 +457,7 @@ th{color:var(--muted);font-weight:600}
     </main>
   </div>
 
-<div id="authGate" style="position:fixed;inset:0;background:#071018;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px"><div class="panel" style="width:min(430px,100%);padding:24px"><h2>🔥 Gestão Fogos</h2><p>Entre para acessar os dados salvos na nuvem.</p><div class="form-grid" style="grid-template-columns:1fr"><label>E-mail<input id="authEmail" type="email" autocomplete="email"></label><label>Senha<input id="authPassword" type="password" autocomplete="current-password"></label></div><button id="authLogin" class="primary full" style="margin-top:12px">Entrar</button><button id="authSignup" class="secondary full" style="margin-top:8px">Criar primeiro acesso</button><p style="font-size:12px;opacity:.7">Banco separado do seu app financeiro.</p></div></div>
+<div id="authGate" style="position:fixed;inset:0;background:#071018;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px"><div class="panel" style="width:min(430px,100%);padding:24px"><h2>🔥 Gestão Fogos</h2><p>Entre para acessar os dados salvos na nuvem.</p><div class="form-grid" style="grid-template-columns:1fr"><label>E-mail<input id="authEmail" type="email" autocomplete="email"></label><label>Senha<div style="display:flex;gap:8px"><input id="authPassword" type="password" autocomplete="current-password" style="flex:1"><button id="togglePassword" type="button" class="secondary" style="white-space:nowrap;padding:0 12px">👁 Ver senha</button></div></label></div><button id="authLogin" class="primary full" style="margin-top:12px">Entrar</button><button id="authSignup" class="secondary full" style="margin-top:8px">Criar primeiro acesso</button><p style="font-size:12px;opacity:.7">Banco separado do seu app financeiro.</p></div></div>
   <div id="toast" class="toast"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -467,6 +467,7 @@ const DB_KEY='gestao_fogos_cloud_v4';
 const SUPABASE_URL="https://yggetslsrdwczlasphjh.supabase.co";
 const SUPABASE_KEY="sb_publishable_PojyyfQRn23UPrHB09CCmw_4PoRNdUL";
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+const emptyState=()=>({products:[],clients:[],suppliers:[],sales:[],purchases:[],clientPayments:[],supplierPayments:[],legacyClientSales:[],legacySupplierDebts:[],cash:[],expenses:[]});
 let state=emptyState(), saleCart=[], currentUser=null;
 function loadState(){return emptyState();}
 function saveState(){renderAll();updateSaleType();}
@@ -781,6 +782,7 @@ document.getElementById('resetData').onclick=()=>toast('Reset geral desativado n
 async function bootAuth(){const {data:{session}}=await sb.auth.getSession();if(session){currentUser=session.user;document.getElementById('authGate').style.display='none';document.getElementById('sessionEmail').textContent=currentUser.email||'';try{await loadCloudState()}catch(e){toast('Erro ao carregar banco: '+e.message)}}else document.getElementById('authGate').style.display='flex';}
 document.getElementById('authLogin').addEventListener('click',async()=>{const email=document.getElementById('authEmail').value.trim(),password=document.getElementById('authPassword').value;const {error}=await sb.auth.signInWithPassword({email,password});if(error)return toast('Login: '+error.message);await bootAuth();};
 document.getElementById('authSignup').onclick=async()=>{const email=document.getElementById('authEmail').value.trim(),password=document.getElementById('authPassword').value;if(!email||password.length<6)return toast('Informe e-mail e senha com pelo menos 6 caracteres.');const {data,error}=await sb.auth.signUp({email,password});if(error)return toast('Cadastro: '+error.message);if(data.session){await bootAuth();toast('Conta criada.')}else toast('Cadastro criado. Confirme pelo e-mail para entrar.');};
+document.getElementById('togglePassword').onclick=()=>{const p=document.getElementById('authPassword');const show=p.type==='password';p.type=show?'text':'password';document.getElementById('togglePassword').textContent=show?'🙈 Ocultar':'👁 Ver senha';};
 document.getElementById('btnLogout').onclick=async()=>{await sb.auth.signOut();location.reload();};
 bootAuth();
 
